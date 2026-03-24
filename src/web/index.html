@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>🧵 黎锦纹样智能提取器</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: "PingFang SC", "Microsoft YaHei", sans-serif; background: #faf7f2; color: #333; }
+  header { background: linear-gradient(135deg, #8B4513, #D2691E); color: white; padding: 24px; text-align: center; }
+  header h1 { font-size: 28px; margin-bottom: 8px; }
+  header p { opacity: 0.85; font-size: 14px; }
+  .container { max-width: 900px; margin: 40px auto; padding: 0 20px; }
+  .upload-zone { border: 3px dashed #D2691E; border-radius: 16px; padding: 60px 20px;
+    text-align: center; cursor: pointer; background: white; transition: all 0.3s; }
+  .upload-zone:hover, .upload-zone.drag-over { background: #fff8f0; border-color: #8B4513; }
+  .upload-zone .icon { font-size: 64px; margin-bottom: 16px; }
+  .upload-zone h2 { font-size: 20px; color: #8B4513; margin-bottom: 8px; }
+  .upload-zone p { color: #999; font-size: 14px; }
+  #fileInput { display: none; }
+  .btn { background: #8B4513; color: white; border: none; padding: 12px 32px;
+    border-radius: 8px; font-size: 16px; cursor: pointer; transition: background 0.2s; }
+  .btn:hover { background: #6B3410; }
+  .btn:disabled { background: #ccc; cursor: not-allowed; }
+  .result-card { background: white; border-radius: 16px; padding: 24px; margin-top: 24px;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.08); }
+  .result-card h3 { color: #8B4513; margin-bottom: 16px; font-size: 18px; }
+  .stats { display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 20px; }
+  .stat-item { background: #fff8f0; border-radius: 8px; padding: 12px 20px; text-align: center; flex: 1; min-width: 100px; }
+  .stat-item .num { font-size: 28px; font-weight: bold; color: #8B4513; }
+  .stat-item .label { font-size: 12px; color: #999; margin-top: 4px; }
+  .colors { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; }
+  .color-chip { width: 40px; height: 40px; border-radius: 8px; border: 2px solid rgba(0,0,0,0.1); }
+  .loading { text-align: center; padding: 40px; color: #8B4513; }
+  .loading .spinner { width: 48px; height: 48px; border: 4px solid #f3e8dc;
+    border-top-color: #8B4513; border-radius: 50%; animation: spin 0.8s linear infinite; margin: 0 auto 16px; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .export-btn { display: inline-block; margin-top: 16px; background: #D2691E; color: white;
+    padding: 10px 24px; border-radius: 8px; text-decoration: none; font-size: 14px; }
+  .export-btn:hover { background: #B8591A; }
+  .preview-img { max-width: 100%; border-radius: 8px; margin-bottom: 16px; }
+  footer { text-align: center; padding: 40px; color: #999; font-size: 13px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>🧵 黎锦纹样智能提取器</h1>
+  <p>拍一张照片，AI 自动精准提取黎锦传统纹样 · 数字化保护非遗文化</p>
+</header>
+
+<div class="container">
+  <div class="upload-zone" id="uploadZone" onclick="document.getElementById(\"fileInput\").click()">
+    <div class="icon">📸</div>
+    <h2>点击上传或拖拽黎锦图片</h2>
+    <p>支持 JPG、PNG、WEBP 格式</p>
+    <br>
+    <button class="btn" onclick="event.stopPropagation(); document.getElementById(\"fileInput\").click()">选择图片</button>
+    <input type="file" id="fileInput" accept="image/*" onchange="handleFile(this.files[0])">
+  </div>
+
+  <div id="resultArea"></div>
+</div>
+
+<footer>
+  <p>🌺 黎锦 · 海南黎族传统纺织技艺 · 联合国非物质文化遗产</p>
+  <p style="margin-top:8px">Powered by AI Pattern Extraction · MIT License</p>
+</footer>
+
+<script>
+const uploadZone = document.getElementById("uploadZone");
+uploadZone.addEventListener("dragover", e => { e.preventDefault(); uploadZone.classList.add("drag-over"); });
+uploadZone.addEventListener("dragleave", () => uploadZone.classList.remove("drag-over"));
+uploadZone.addEventListener("drop", e => {
+  e.preventDefault();
+  uploadZone.classList.remove("drag-over");
+  if (e.dataTransfer.files[0]) handleFile(e.dataTransfer.files[0]);
+});
+
+async function handleFile(file) {
+  if (!file || !file.type.startsWith("image/")) return alert("请选择图片文件");
+  const resultArea = document.getElementById("resultArea");
+  const previewUrl = URL.createObjectURL(file);
+
+  resultArea.innerHTML = `
+    <div class="result-card">
+      <img src="${previewUrl}" class="preview-img" style="max-height:300px;object-fit:contain">
+      <div class="loading">
+        <div class="spinner"></div>
+        <p>AI 正在分析黎锦纹样，请稍候...</p>
+      </div>
+    </div>`;
+
+  const formData = new FormData();
+  formData.append("file", file);
+
+  try {
+    const res = await fetch("/extract", { method: "POST", body: formData });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || "提取失败");
+
+    const colorsHtml = (data.dominant_colors || []).map(c =>
+      `<div class="color-chip" style="background:rgb(${c[0]},${c[1]},${c[2]})" title="RGB(${c.join(",")})"></div>`
+    ).join("");
+
+    resultArea.innerHTML = `
+      <div class="result-card">
+        <img src="${previewUrl}" class="preview-img" style="max-height:300px;object-fit:contain">
+        <h3>✅ 纹样提取完成</h3>
+        <div class="stats">
+          <div class="stat-item"><div class="num">${data.pattern_count}</div><div class="label">纹样区域</div></div>
+          <div class="stat-item"><div class="num">${data.image_size ? data.image_size[0] + "×" + data.image_size[1] : "-"}</div><div class="label">图片尺寸</div></div>
+          <div class="stat-item"><div class="num">${(data.dominant_colors||[]).length}</div><div class="label">主色调</div></div>
+        </div>
+        <p style="margin-bottom:8px;color:#666;font-size:14px">提取的主色调：</p>
+        <div class="colors">${colorsHtml}</div>
+        ${data.svg_url ? `<a href="${data.svg_url}" class="export-btn" download>⬇️ 下载纹样图谱 SVG</a>` : ""}
+      </div>`;
+  } catch (err) {
+    resultArea.innerHTML = `<div class="result-card" style="border-left:4px solid #e74c3c">
+      <h3 style="color:#e74c3c">❌ 提取失败</h3><p>${err.message}</p></div>`;
+  }
+}
+</script>
+</body>
+</html>
